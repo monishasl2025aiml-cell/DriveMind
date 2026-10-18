@@ -35,6 +35,54 @@ export function DriveProvider({ children }: { children: ReactNode }) {
         console.error('Error loading vehicles:', error);
       });
   }, []);
+  useEffect(() => {
+  Promise.all([
+    fetch('http://localhost:8080/trips').then(response => {
+      if (!response.ok) {
+        throw new Error('Failed to fetch trips');
+      }
+      return response.json();
+    }),
+
+    fetch('http://localhost:8080/trip-events').then(response => {
+      if (!response.ok) {
+        throw new Error('Failed to fetch trip events');
+      }
+      return response.json();
+    })
+  ])
+    .then(([tripsData, eventsData]) => {
+
+      const mappedTrips = tripsData.map((t: any) => {
+
+        const tripEvents = eventsData
+          .filter((e: any) => e.trip?.id === t.id)
+          .map((e: any) => ({
+            type: e.eventType,
+            decision: e.decision,
+            reason: e.reason,
+            time: e.eventTime
+          }));
+
+        return {
+          id: t.id,
+          vehicle: t.vehicle?.code ?? '',
+          source: t.source?.code ?? '',
+          destination: t.destination?.code ?? '',
+          status: t.status,
+          distance: t.distance,
+          batteryUsed: t.batteryUsed,
+          startedAt: t.startedAt,
+          timeline: tripEvents
+        };
+      });
+
+      setTrips(mappedTrips);
+    })
+    .catch(error => {
+      console.error('Trip/event fetch error:', error);
+    });
+}, []);
 
   return (
     <Context.Provider

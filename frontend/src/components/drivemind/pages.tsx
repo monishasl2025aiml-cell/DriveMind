@@ -63,7 +63,63 @@ export function HistoryPage(){const {trips}=useDrive();const [query,setQuery]=us
 export function Analytics(){const {trips}=useDrive();const types:Record<string,number>={},vs:Record<string,number>={};trips.forEach(t=>{vs[t.vehicle]=(vs[t.vehicle]||0)+1;t.timeline.forEach(e=>types[e.type]=(types[e.type]||0)+1)});const bars=(data:Record<string,number>,percent=false)=><div className="analytics-bars">{Object.entries(data).map(([k,v])=><div className="analytics-bar" key={k}><div><span>{rules[k]?.label||k}</span><strong>{v}{percent?'%':''}</strong></div><progress value={v} max={Math.max(...Object.values(data),1)}/></div>)}{!Object.keys(data).length&&<p>No journey data yet.</p>}</div>;return <><PageHeading title="Fleet analytics" subtitle="Operational insights from your journeys and road events."/><div className="analytics-grid"><section><div className="section-heading"><h2>Events by type</h2><Activity size={19}/></div>{bars(types)}</section><section><div className="section-heading"><h2>Trips per vehicle</h2><CarFront size={19}/></div>{bars(vs)}</section><section className="wide"><div className="section-heading"><div><h2>Battery used per trip</h2><p>Energy consumption across completed journeys</p></div><Battery size={19}/></div>{bars(Object.fromEntries(trips.filter(t=>t.status==='COMPLETED').map(t=>[`Trip #TRP-${String(t.id).padStart(3,'0')}`,t.batteryUsed])),true)}</section></div></>}
 type Sim={id:number;route:string[];seg:number;p:number;speed:number;battery:number;used:number;distance:number;decision:string;reason:string;blocked:string[];done:boolean;low:boolean};
 export function Simulation(){const {vehicles,setVehicles,trips,setTrips}=useDrive();const [vehicle,setVehicle]=useState('1'),[source,setSource]=useState('A'),[destination,setDestination]=useState('F'),[sim,setSim]=useState<Sim|null>(null),[error,setError]=useState(''),[log,setLog]=useState<TripEvent[]>([]);
-const addLog=(type:string,decision:string,reason:string,id:number)=>{const event={type,decision,reason,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};setLog(l=>[event,...l]);setTrips(ts=>ts.map(t=>t.id===id?{...t,timeline:[...t.timeline,event]}:t))};
+const [backendTrip, setBackendTrip] = useState<any>(null);
+const addLog = (
+  type: string,
+  decision: string,
+  reason: string,
+  id: number
+) => {
+  const event = {
+    type,
+    decision,
+    reason,
+    time: new Date().toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+  };
+
+  // Update frontend
+  setLog(l => [event, ...l]);
+
+  setTrips(ts =>
+    ts.map(t =>
+      t.id === id
+        ? { ...t, timeline: [...t.timeline, event] }
+        : t
+    )
+  );
+
+  // Save event to backend / Supabase
+  if (backendTrip?.id) {
+    fetch('http://localhost:8080/trip-events', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        tripId: backendTrip.id,
+        eventType: type,
+        decision: decision,
+        reason: reason
+      })
+    })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Failed to save trip event');
+        }
+        return response.json();
+      })
+      .then(savedEvent => {
+        console.log('Trip event saved:', savedEvent);
+      })
+      .catch(error => {
+        console.error('Trip event error:', error);
+      });
+  }
+};
 function fire(type:string){if(!sim||sim.done)return;const rule=rules[type];if(!rule)return;const current=sim.route[sim.seg],nextNode=sim.route[sim.seg+1];if(!current||!nextNode)return;let route=sim.route,blocked=sim.blocked,decision=rule.decision,reason=rule.reason,speed=rule.speed,seg=sim.seg,p=sim.p;if(type==='ROAD_BLOCK'){blocked=[...blocked,[current,nextNode].sort().join()];const next=findRoute(current,destination,blocked);if(next.length>1){route=next;seg=0;p=0}else{speed=0;decision='Stopped';reason='Road blocked. No alternative route available.'}}if(type==='LOW_BATTERY'){const next=findRoute(current,'E',blocked);if(next.length>1){route=next;seg=0;p=0;reason='Routing to the charging station at City center.'}else{speed=0;decision='Stopped';reason='Charging station reached at City center.'}}setSim({...sim,route,blocked,decision,reason,speed,seg,p,low:sim.low||type==='LOW_BATTERY'});addLog(type,decision,reason,sim.id)}
 useEffect(()=>{if(!sim||sim.done||sim.speed===0)return;const timer=setInterval(()=>setSim(s=>{if(!s||s.done)return s;const a=nodes[s.route[s.seg]??source],b=nodes[s.route[s.seg+1]??destination];if(!a||!b)return {...s,done:true,speed:0};const step=s.speed*.22,p=s.p+step/Math.hypot(b.x-a.x,b.y-a.y),drain=s.speed*.0012;const next={...s,p,battery:Math.max(0,s.battery-drain),used:s.used+drain,distance:s.distance+step/20};if(p>=1){next.seg++;next.p=0;if(next.seg>=s.route.length-1){next.done=true;next.speed=0;next.decision=s.low?'Charging station reached':'Trip complete';next.reason=`Arrived at ${places[s.route.at(-1)||destination]}.`;}}return next}),100);return ()=>clearInterval(timer)},[sim?.id,sim?.done,sim?.speed,destination]);
 useEffect(() => {
@@ -83,6 +139,38 @@ useEffect(() => {
         : t
     )
   );
+  if (backendTrip?.id) {
+  const completedTrip = {
+    ...backendTrip,
+    status: 'COMPLETED',
+    distance: Math.round(sim.distance),
+    batteryUsed: Math.max(1, Math.round(sim.used)),
+    endedAt: new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+  .toISOString()
+  .slice(0, 23)
+  };
+
+  fetch(`http://localhost:8080/trips/${backendTrip.id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(completedTrip)
+  })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Failed to complete trip');
+      }
+      return response.json();
+    })
+    .then(updatedTrip => {
+      console.log('Trip completed:', updatedTrip);
+      setBackendTrip(updatedTrip);
+    })
+    .catch(error => {
+      console.error('Trip completion error:', error);
+    });
+}
 
   const currentVehicle = vehicles.find(
     v => String(v.id) === vehicle
@@ -124,7 +212,52 @@ useEffect(() => {
 }, [sim?.done]);
 useEffect(()=>{if(sim&&sim.battery<20&&!sim.low&&!sim.done)fire('LOW_BATTERY')},[sim?.battery]);
 const available=vehicles.filter(v=>v.status==='AVAILABLE'||String(v.id)===vehicle&&v.status==='ACTIVE');const position=sim?sim.done?nodes[sim.route.at(-1)||destination]:(()=>{const a=nodes[sim.route[sim.seg]??source],b=nodes[sim.route[sim.seg+1]??destination];return a&&b?{x:a.x+(b.x-a.x)*sim.p,y:a.y+(b.y-a.y)*sim.p}:undefined})():undefined;
-return <><PageHeading title="Simulation" subtitle="Your road network. Real-time decisions. Complete control." action={<span className="simulation-mode"><span className="live-dot"/>Decision engine online</span>}/><form className="trip-form" onSubmit={e=>{e.preventDefault();if(source===destination){setError('Choose a different destination.');return}const v=vehicles.find(v=>String(v.id)===vehicle&&v.status==='AVAILABLE');if(!v){setError('Select an available vehicle.');return}const route=findRoute(source,destination);if(route.length<2){setError('No route available.');return}const id=Math.max(0,...trips.map(t=>t.id))+1;setError('');setLog([]);setTrips(ts=>[{id,vehicle:v.code,source,destination,status:'ACTIVE',distance:0,batteryUsed:0,startedAt:new Date().toISOString(),timeline:[]},...ts]);const activeVehicle = {
+return <><PageHeading title="Simulation" subtitle="Your road network. Real-time decisions. Complete control." action={<span className="simulation-mode"><span className="live-dot"/>Decision engine online</span>}/><form className="trip-form" onSubmit={e=>{e.preventDefault();if(source===destination){setError('Choose a different destination.');return}const v=vehicles.find(v=>String(v.id)===vehicle&&v.status==='AVAILABLE');if(!v){setError('Select an available vehicle.');return}const route=findRoute(source,destination);if(route.length<2){setError('No route available.');return}const id=Math.max(0,...trips.map(t=>t.id))+1;setError('');setLog([]);setTrips(ts=>[{id,vehicle:v.code,source,destination,status:'ACTIVE',distance:0,batteryUsed:0,startedAt:new Date().toISOString(),timeline:[]},...ts]);
+
+setTrips(ts => [
+  {
+    id,
+    vehicle: v.code,
+    source,
+    destination,
+    status: 'ACTIVE',
+    distance: 0,
+    batteryUsed: 0,
+    startedAt: new Date().toISOString(),
+    timeline: []
+  },
+  ...ts
+]);
+
+fetch('http://localhost:8080/trips', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    vehicle: v.code,
+    source: source,
+    destination: destination,
+    status: 'ACTIVE',
+    distance: 0,
+    batteryUsed: 0
+  })
+})
+.then(response => {
+  if (!response.ok) {
+    throw new Error('Failed to create trip');
+  }
+  return response.json();
+})
+.then(createdTrip => {
+  setBackendTrip(createdTrip);
+  console.log('Trip created:', createdTrip);
+})
+.catch(error => {
+  console.error('Trip creation error:', error);
+});
+
+const activeVehicle = {
   ...v,
   status: 'ACTIVE'
 };

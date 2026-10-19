@@ -21,7 +21,7 @@ export function DriveProvider({ children }: { children: ReactNode }) {
   const [signedIn, setSignedIn] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:8080/vehicles')
+    fetch('https://drivemind-production-3577.up.railway.app/vehicles')
       .then((response) => {
         if (!response.ok) {
           throw new Error('Failed to fetch vehicles');
@@ -37,14 +37,14 @@ export function DriveProvider({ children }: { children: ReactNode }) {
   }, []);
   useEffect(() => {
   Promise.all([
-    fetch('http://localhost:8080/trips').then(response => {
+    fetch('https://drivemind-production-3577.up.railway.app/trips').then(response => {
       if (!response.ok) {
         throw new Error('Failed to fetch trips');
       }
       return response.json();
     }),
 
-    fetch('http://localhost:8080/trip-events').then(response => {
+    fetch('https://drivemind-production-3577.up.railway.app/trip-events').then(response => {
       if (!response.ok) {
         throw new Error('Failed to fetch trip events');
       }

@@ -17,7 +17,7 @@ export function Vehicles(){const {vehicles,setVehicles,trips}=useDrive();const [
 
   try {
     const response = await fetch(
-      `http://localhost:8080/vehicles/${v.id}`,
+      `https://drivemind-production-3577.up.railway.app/vehicles/${v.id}`,
       {
         method: 'DELETE'
       }
@@ -33,7 +33,7 @@ export function Vehicles(){const {vehicles,setVehicles,trips}=useDrive();const [
     console.error('Delete error:', error);
     alert('Could not delete vehicle.');
   }
-}}><Trash2 size={16}/></Button></div></article>)}</div>{adding&&<div className="modal-backdrop"><form className="form-modal" role="dialog" aria-modal="true" aria-label="Add vehicle" onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget),code=String(f.get('code')).trim(),model=String(f.get('model')).trim();if(!code||!model)return;if(vehicles.some(v=>v.code===code)){setError('A vehicle with this code already exists.');return}fetch('http://localhost:8080/vehicles', {
+}}><Trash2 size={16}/></Button></div></article>)}</div>{adding&&<div className="modal-backdrop"><form className="form-modal" role="dialog" aria-modal="true" aria-label="Add vehicle" onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget),code=String(f.get('code')).trim(),model=String(f.get('model')).trim();if(!code||!model)return;if(vehicles.some(v=>v.code===code)){setError('A vehicle with this code already exists.');return}fetch('https://drivemind-production-3577.up.railway.app/vehicles', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json'
@@ -94,7 +94,7 @@ const addLog = (
 
   // Save event to backend / Supabase
   if (backendTrip?.id) {
-    fetch('http://localhost:8080/trip-events', {
+    fetch('https://drivemind-production-3577.up.railway.app/trip-events', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -150,7 +150,7 @@ useEffect(() => {
   .slice(0, 23)
   };
 
-  fetch(`http://localhost:8080/trips/${backendTrip.id}`, {
+  fetch(`https://drivemind-production-3577.up.railway.app/trips/${backendTrip.id}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json'
@@ -184,7 +184,7 @@ useEffect(() => {
     status: 'AVAILABLE'
   };
 
-  fetch(`http://localhost:8080/vehicles/${currentVehicle.id}`, {
+  fetch(`https://drivemind-production-3577.up.railway.app/vehicles/${currentVehicle.id}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json'
@@ -229,7 +229,7 @@ setTrips(ts => [
   ...ts
 ]);
 
-fetch('http://localhost:8080/trips', {
+fetch('https://drivemind-production-3577.up.railway.app/trips', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json'
@@ -262,7 +262,7 @@ const activeVehicle = {
   status: 'ACTIVE'
 };
 
-fetch(`http://localhost:8080/vehicles/${v.id}`, {
+fetch(`https://drivemind-production-3577.up.railway.app/vehicles/${v.id}`, {
   method: 'PUT',
   headers: {
     'Content-Type': 'application/json'
